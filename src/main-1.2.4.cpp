@@ -116,6 +116,10 @@ public:
         glUseProgram(ID);
     }
 
+    void setMat4(const std::string& name, const glm::mat4& mat) const {
+        glUniformMatrix4fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, glm::value_ptr(mat));
+    }
+
 private:
     void checkCompileErrors(unsigned int shader, const std::string& type) {
         int success;
@@ -433,31 +437,34 @@ int main() {
 
         processInput(app.window, deltaTime);
 
-        glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClearColor(0.1f, 0.1f, 0.15f, 1.0f);  // 设置底色
+        glClear(GL_COLOR_BUFFER_BIT);           // 清屏，用底色覆盖整个窗口
 
-        // mesh.updateVertices(time);
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), 800.0f/600.0f, 0.1f, 100.0f);
-
         // 视图矩阵，摄像机控制视角
         glm::mat4 view = camera.GetViewMatrix();
         // 模型矩阵：旋转 + 平移 + 缩放
         glm::mat4 model = glm::mat4(1.0f);
-        // model = glm::translate(model, glm::vec3(0.2f * sin(time), 0.0f, 0.0f)); // 左右平移
-        model = glm::rotate(model, time * 0.5f, glm::vec3(0.0f, 0.0f, 1.0f));  // 旋转
-        // model = glm::scale(model, glm::vec3(1.0f + 0.3f * sin(time), 1.0f, 1.0f));
+        // model = glm::translate(model, glm::vec3(0.2f * sin(time), 0.0f, 0.0f));      // 左右平移
+        model = glm::rotate(model, time * 0.5f, glm::vec3(0.0f, 0.0f, 1.0f));           // 旋转
+        // model = glm::scale(model, glm::vec3(1.0f + 0.3f * sin(time), 1.0f, 1.0f));   // 缩放
         glm::mat4 mvp = projection * view * model;
 
+        // 这几行要保证顺序
+        mesh.updateVertices(time);
         shader.use();
-        glUniformMatrix4fv(glGetUniformLocation(shader.ID, "uMVP"), 1, GL_FALSE, glm::value_ptr(mvp));
+        shader.setMat4("uMVP", mvp);
         mesh.draw();
+        
+        // 绘制窗口的gui
         imgui_draw();
 
-        time += 0.1f;
+        time += deltaTime;
         app.swapBuffers();
         app.pollEvents();
     }
 
+    app.terminate();
     return 0;
 }
 

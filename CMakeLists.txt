@@ -34,11 +34,13 @@ add_subdirectory(libs/glfw)  # 加入 GLFW 子目录
 
 
 add_executable(app
+    # src/helloworld.cpp
+    # src/main-1.1.4.cpp    # 三维的一个正方体
     # src/main-1.2.0.cpp    # 图形的颜色大小可变化  
     # src/main-1.2.1.cpp    # model view projection
     # src/main-1.2.2.cpp    # mvp 控制
     # src/main-1.2.3.cpp    # 有了 camera 
-    src/main-1.2.4.cpp      # 封装了 camera 类
+    src/main-1.2.4.cpp    # 封装了 camera 类
     libs/glad/src/glad.c
     ${IMGUI_SRC}
 )

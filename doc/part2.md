@@ -2,32 +2,23 @@
 
 1. 动态顶点数据更新（VBO数据动态修改）
 学习如何使用 glBufferSubData 或者映射缓冲区（glMapBuffer / glMapBufferRange）实现动态更新顶点数据。
-
 实现简单动画，比如顶点位置的变化、顶点颜色的实时变化。
-
 这是你列表中“动态顶点数据绘制（重要）”的关键。
 
 2. 矩阵变换和 glm 库的引入
 学习并理解模型、视图、投影三种矩阵的含义与作用。
-
 引入 glm 库，实现基础的平移、旋转、缩放变换。
-
 把变换矩阵传递给顶点着色器，理解 uniform 变量的使用。
-
 实现简单的视角控制（比如键盘或鼠标控制摄像机）。
 
 3. 索引缓冲进阶和多网格绘制
 了解如何管理多个 VAO/VBO/EBO，绘制多个不同的几何体。
-
 理解如何优化绘制调用。
 
 4. 着色器进阶：光照基础
 学习基础光照模型，先实现简单的漫反射（Lambert），再学习 Phong 和 Blinn-Phong。
-
 实现法线向量传递（需要为顶点数据添加法线属性）。
-
 使用光源位置和观察方向实现动态光照。
-
 加深对着色器编写的理解。
 
 
@@ -55,3 +46,25 @@ fov 变小（如 45°→15°）：视野范围变窄，物体看起来也更大�
 保持滚轮缩放为相机变焦。
 
 可在 ImGui 添加控制面板，让用户手动调试/观察 FOV 与位置之间的关系。
+
+
+
+# 时间控制专题
+
+假设你希望按 W 键让摄像机每秒移动 2.5f 个单位，如果你不传 deltaTime，在 30 FPS 和 120 FPS 的机器上表现会差异巨大。
+
+❌ 错误做法（不使用 deltaTime）：
+camera.Position += camera.Front * 2.5f;  // 每帧都动 2.5f
+30 FPS：1 秒 画面更新 30 次，总移动 75 个单位 😱
+
+120 FPS：1 秒 画面更新 120 次，总移动 300 个单位 🤯
+
+完全炸了！
+
+✅ 正确做法（使用 deltaTime）：
+camera.Position += camera.Front * 2.5f * deltaTime;
+不管你是 30FPS 还是 120FPS，只要 deltaTime 是每帧时间，乘上它就能让每秒走大约 2.5f 个单位，运动速度恒定。
+
+float currentFrame = float(glfwGetTime());
+deltaTime = currentFrame - lastFrame;
+lastFrame = currentFrame;
