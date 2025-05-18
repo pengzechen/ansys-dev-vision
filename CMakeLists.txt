@@ -40,7 +40,8 @@ add_executable(app
     # src/main-1.2.1.cpp    # model view projection
     # src/main-1.2.2.cpp    # mvp 控制
     # src/main-1.2.3.cpp    # 有了 camera 
-    src/main-1.2.4.cpp    # 封装了 camera 类
+    # src/main-1.2.4.cpp    # 封装了 camera 类
+    src/main-1.2.5.cpp    # 封装了 camera Control 类
     libs/glad/src/glad.c
     ${IMGUI_SRC}
 )

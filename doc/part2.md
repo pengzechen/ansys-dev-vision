@@ -68,3 +68,15 @@ camera.Position += camera.Front * 2.5f * deltaTime;
 float currentFrame = float(glfwGetTime());
 deltaTime = currentFrame - lastFrame;
 lastFrame = currentFrame;
+
+# 关于图像倾斜
+
+问题来源	                    是否合理	    建议
+摄像机角度变化导致矩形倾斜	    ✅ 合理	        无需修复
+摄像机向量失去正交性	        ❌ 不合理	    重建 Up 和 Right
+手动调了 camera.Up	        ❌ 不合理	        移除控制或只读显示
+
+✅ 最小建议（立即修正）：
+确保不要手动修改 Up 向量！
+每次修改 Yaw/Pitch 后调用 updateCameraVectors()。
+在 camera 中 始终通过 WorldUp 与 Front 计算 Up 与 Right，不要自己指定。

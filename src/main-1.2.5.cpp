@@ -1,7 +1,9 @@
 
 
 /*
-    实现简单的视角控制（比如键盘或鼠标控制摄像机）。  封装 Camera 类
+    实现简单的视角控制（比如键盘或鼠标控制摄像机）。  
+    
+    封装 Camera control 类， 添加 mvp builder 类
 */
 
 #include <glad/glad.h>
@@ -345,48 +347,96 @@ private:
     }
 };
 
-Camera camera;
+class CameraController {
+    Camera* camera;
+    float lastX, lastY;
+    bool firstMouse;
 
-void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
-    static float lastX = 400.0f;
-    static float lastY = 300.0f;
-    static bool firstMouse = true;
+public:
+    CameraController()
+        : camera(nullptr), lastX(400.0f), lastY(300.0f), firstMouse(true) {}
 
-    if (firstMouse) {
-        lastX = float(xpos);
-        lastY = float(ypos);
-        firstMouse = false;
+    void attach(Camera* cam) {
+        camera = cam;
     }
 
-    float xoffset = float(xpos) - lastX;
-    float yoffset = lastY - float(ypos); // 注意反转 yoffset
-    lastX = float(xpos);
-    lastY = float(ypos);
+    // 处理鼠标移动
+    void onMouseMove(double xpos, double ypos) {
+        if (!camera) return;
 
-    camera.ProcessMouseMovement(xoffset, yoffset);
-}
+        if (firstMouse) {
+            lastX = float(xpos);
+            lastY = float(ypos);
+            firstMouse = false;
+        }
 
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
-    camera.ProcessMouseScroll((float)yoffset);
-}
+        float xoffset = float(xpos) - lastX;
+        float yoffset = lastY - float(ypos);  // y轴反转
+        lastX = float(xpos);
+        lastY = float(ypos);
 
-void processInput(GLFWwindow* window, float deltaTime) {
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        camera.ProcessKeyboard(FORWARD, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        camera.ProcessKeyboard(BACKWARD, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        camera.ProcessKeyboard(LEFT, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        camera.ProcessKeyboard(RIGHT, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-        camera.ProcessKeyboard(UP, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
-        camera.ProcessKeyboard(DOWN, deltaTime);
+        camera->ProcessMouseMovement(xoffset, yoffset);
+    }
 
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, true);
-}
+    // 处理鼠标滚轮
+    void onScroll(double xoffset, double yoffset) {
+        if (!camera) return;
+        camera->ProcessMouseScroll((float)yoffset);
+    }
+
+    // 处理键盘输入
+    void onKey(GLFWwindow* window, float deltaTime) {
+        if (!camera) return;
+
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+            camera->ProcessKeyboard(FORWARD, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+            camera->ProcessKeyboard(BACKWARD, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+            camera->ProcessKeyboard(LEFT, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+            camera->ProcessKeyboard(RIGHT, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+            camera->ProcessKeyboard(UP, deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+            camera->ProcessKeyboard(DOWN, deltaTime);
+
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+            glfwSetWindowShouldClose(window, true);
+    }
+
+    // 重置首次鼠标位置，外部可调用（例如切换窗口时）
+    void resetMouse() {
+        firstMouse = true;
+    }
+};
+
+class MVPBuilder {
+public:
+    glm::mat4 model = glm::mat4(1.0f);
+
+    MVPBuilder& rotate(float angleRad, glm::vec3 axis) {
+        model = glm::rotate(model, angleRad, axis);
+        return *this;
+    }
+
+    MVPBuilder& translate(glm::vec3 offset) {
+        model = glm::translate(model, offset);
+        return *this;
+    }
+
+    MVPBuilder& scale(glm::vec3 factor) {
+        model = glm::scale(model, factor);
+        return *this;
+    }
+
+    glm::mat4 build(Camera& camera, float aspectRatio) const {
+        glm::mat4 view = camera.GetViewMatrix();
+        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), aspectRatio, 0.1f, 100.0f);
+        return projection * view * model;
+    }
+};
+
 
 const char* vertexShaderSource = R"glsl(
     #version 330 core
@@ -416,6 +466,7 @@ void imgui_draw();
 float deltaTime = 0.0f; 
 float lastFrame = 0.0f;
 
+Camera camera;
 
 int main() {
     Application app;
@@ -423,37 +474,53 @@ int main() {
 
     imgui_init(app);
 
-    // glfwSetInputMode(app.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // 隐藏光标并锁定到窗口中央
-    // glfwSetCursorPosCallback(app.window, mouse_callback);            // 设置鼠标回调
-    // glfwSetScrollCallback(app.window, scroll_callback);              // 设置鼠标回调
+    CameraController controller;
+    controller.attach(&camera);
+    
+    glfwSetWindowUserPointer(app.window, &controller);
 
+    // 设置 scroll 回调
+    // glfwSetScrollCallback(app.window, scroll_callback);              // 设置鼠标回调
+    glfwSetScrollCallback(app.window, [](GLFWwindow* window, double xoffset, double yoffset) {
+        // 获取用户指针，并强转回 controller 类型
+        auto* controller = static_cast<CameraController*>(glfwGetWindowUserPointer(window));
+        if (controller) {
+            controller->onScroll(xoffset, yoffset);
+        }
+    });
+    // 设置 mouse move 回调
+    // glfwSetCursorPosCallback(app.window, mouse_callback);            // 设置鼠标回调
+    glfwSetCursorPosCallback(app.window, [](GLFWwindow* window, double xpos, double ypos) {
+        auto* controller = static_cast<CameraController*>(glfwGetWindowUserPointer(window));
+        if (controller) {
+            controller->onMouseMove(xpos, ypos);
+        }
+    });
+
+    glfwSetInputMode(app.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // 隐藏光标并锁定到窗口中央
+
+    glfwSwapInterval(1);
+    
+    
     Shader shader(vertexShaderSource, fragmentShaderSource);
     
     Mesh mesh;
     
     float time = 0.0f;
 
-    glfwSwapInterval(1);
-
     while (!app.shouldClose()) {
         float currentFrame = float(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
-        processInput(app.window, deltaTime);
+        controller.onKey(app.window, deltaTime);
 
         glClearColor(0.1f, 0.1f, 0.15f, 1.0f);  // 设置底色
         glClear(GL_COLOR_BUFFER_BIT);           // 清屏，用底色覆盖整个窗口
 
-        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), 800.0f/600.0f, 0.1f, 100.0f);
-        // 视图矩阵，摄像机控制视角
-        glm::mat4 view = camera.GetViewMatrix();
-        // 模型矩阵：旋转 + 平移 + 缩放
-        glm::mat4 model = glm::mat4(1.0f);
-        // model = glm::translate(model, glm::vec3(0.2f * sin(time), 0.0f, 0.0f));      // 左右平移
-        model = glm::rotate(model, time * 0.5f, glm::vec3(0.0f, 0.0f, 1.0f));           // 旋转
-        // model = glm::scale(model, glm::vec3(1.0f + 0.3f * sin(time), 1.0f, 1.0f));   // 缩放
-        glm::mat4 mvp = projection * view * model;
+        MVPBuilder mvpBuilder;
+        glm::mat4 mvp = mvpBuilder.rotate(time * 0.5f, {0, 0, 1})
+                        .build(camera, 800.0f / 600.0f);
 
         // 这几行要保证顺序
         mesh.updateVertices(time);
@@ -495,7 +562,7 @@ void imgui_draw() {
     ImGui::SliderFloat("FOV", &camera.Zoom, 1.0f, 90.0f);
     ImGui::SliderFloat3("Position", glm::value_ptr(camera.Position),      -10.0f, 10.0f);
     ImGui::SliderFloat3("Front",    glm::value_ptr(camera.Front),    -1.0f, 1.0f);
-    ImGui::SliderFloat3("Up",       glm::value_ptr(camera.Up),       -1.0f, 1.0f);  // ✅ 添加这一行
+    // ImGui::SliderFloat3("Up",       glm::value_ptr(camera.Up),       -1.0f, 1.0f);  // ✅ 添加这一行
 
     // ✅ 添加 yaw 和 pitch 控制
     bool changed = false;
