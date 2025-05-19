@@ -293,6 +293,10 @@ public:
         glUniformMatrix4fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, glm::value_ptr(mat));
     }
 
+    void setVec3(const std::string& name, const glm::vec3& value) const {
+        glUniform3fv(glGetUniformLocation(ID, name.c_str()), 1, glm::value_ptr(value));
+    }
+
 private:
     void checkCompileErrors(unsigned int shader, const std::string& type) {
         int success;
@@ -664,14 +668,14 @@ int main() {
     // });
     // 设置 mouse move 回调
     // glfwSetCursorPosCallback(app.window, mouse_callback);            // 设置鼠标回调
-    // glfwSetCursorPosCallback(app.window, [](GLFWwindow* window, double xpos, double ypos) {
-    //     auto* controller = static_cast<CameraController*>(glfwGetWindowUserPointer(window));
-    //     if (controller) {
-    //         controller->onMouseMove(xpos, ypos);
-    //     }
-    // });
+    glfwSetCursorPosCallback(app.window, [](GLFWwindow* window, double xpos, double ypos) {
+        auto* controller = static_cast<CameraController*>(glfwGetWindowUserPointer(window));
+        if (controller) {
+            controller->onMouseMove(xpos, ypos);
+        }
+    });
 
-    // glfwSetInputMode(app.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // 隐藏光标并锁定到窗口中央
+    glfwSetInputMode(app.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // 隐藏光标并锁定到窗口中央
 
     glfwSwapInterval(1);
     
@@ -695,16 +699,18 @@ int main() {
         MVPBuilder mvpBuilder;
         
         /* 现在不希望他旋转 */
-        // glm::mat4 mvp = mvpBuilder.rotate(time * 0.5f, {0, 0, 1})
-        //                 .build(camera, 800.0f / 600.0f);
+        glm::mat4 mvp = mvpBuilder.rotate(time * 0.5f, {0, 0, 1})
+                        .build(camera, 800.0f / 600.0f);
         
-        glm::mat4 mvp = mvpBuilder.build(camera, 800.0f / 600.0f);
+        // glm::mat4 mvp = mvpBuilder.build(camera, 800.0f / 600.0f);
                     
 
         // 这几行要保证顺序
         // mesh.updateVertices(time);
         shader.use();
         shader.setMat4("uMVP", mvp);
+        float green = 0.5f + 0.5f * sin(time); // 在 0 ~ 1 之间变化
+        shader.setVec3("uColor", glm::vec3(0.2f, green, 1.0f));
         mesh.draw();
         
         // 绘制窗口的gui
