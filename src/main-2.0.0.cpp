@@ -328,7 +328,7 @@ public:
     std::vector<uint64_t> quad_indices;
     std::vector<unsigned int> line_indices;
 
-    Mesh(const std::string& xdmf_path = "disk_2d.xdmf") {
+    Mesh(const std::string& xdmf_path = "../data/disk_2d.xdmf") {
         if (!loader.Load(xdmf_path)) {
             std::cerr << "Failed to load mesh.\n";
             return;

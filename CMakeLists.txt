@@ -40,8 +40,12 @@ add_subdirectory(libs/glfw)  # 加入 GLFW 子目录
 add_executable(app
 
     # src/helloworld.cpp    # 显示一个基本窗口
-
+    # src/main-1.1.0.cpp    # 显示一个矩形
+    # src/main-1.1.1.cpp    # 封装了一个shader
+    # src/main-1.1.2.cpp    # 封装了一个Shader 和 mesh
+    # src/main-1.1.3.cpp    # 封装了 Application 
     # src/main-1.1.4.cpp    # 三维的一个正方体
+
     # src/main-1.2.0.cpp    # 图形的颜色大小可变化  
     # src/main-1.2.1.cpp    # model view projection
     # src/main-1.2.2.cpp    # mvp 控制
@@ -52,7 +56,8 @@ add_executable(app
     # src/hdf5-test.cpp     # 尝试加载 xdmf .h5 数据
     # src/hdf5-class.cpp    # hdf5-test 类封装
 
-    src/main-2.0.0.cpp
+    # src/main-2.0.0.cpp    # 可以渲染2d的网格（后面实现 密度、位移、应力、应变 着色）
+    src/main-3.0.0.cpp
 
     libs/glad/src/glad.c
     ${IMGUI_SRC}
