@@ -57,7 +57,8 @@ add_executable(app
     # src/hdf5-class.cpp    # hdf5-test 类封装
 
     # src/main-2.0.0.cpp    # 可以渲染2d的网格（后面实现 密度、位移、应力、应变 着色）
-    src/main-3.0.0.cpp
+    # src/main-3.0.0.cpp    # 可以渲染3d的网格（后面实现 密度、位移、应力、应变 着色）
+    src/main-3.1.0.cpp
 
     libs/glad/src/glad.c
     ${IMGUI_SRC}

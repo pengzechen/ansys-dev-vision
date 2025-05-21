@@ -37,3 +37,10 @@ Node	                    一个顶点，有 (x, y) 坐标
 Element	                    一个网格单元，由多个 Node 构成
 4 nodes	                    意味着每个 element 是四边形
 Element 数量	            网格细化程度，越多代表越精细的划分
+
+
+
+VTK Type	描述	点数
+
+9	    hexahedron	8  六面体
+8	    wedge	    6  三棱柱
