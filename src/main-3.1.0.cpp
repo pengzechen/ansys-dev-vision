@@ -39,6 +39,7 @@
 #include <unordered_map>
 #include <iostream>
 #include <cassert>
+#include <set>
 
 class XdmfMeshLoader {
 public:
@@ -343,101 +344,69 @@ public:
 
     std::vector<float> vertices;                 // 每个顶点包含 6 个 float（位置 + 法线）
     std::vector<unsigned int> triangle_indices;  // 三角面索引
+    std::vector<unsigned int> line_indices;      // 线索引
 
-    Mesh(const std::string& xdmf_path = "model.xdmf") {
-        try {
-            loader.Load(xdmf_path);
-        } catch (const std::exception& ex) {
-            std::cerr << "Error loading XDMF file: " << ex.what() << std::endl;
-            return;
-        }
+    void mesh_face() {
+        std::unordered_map<uint64_t, int> indexMap;
+        std::vector<float> tempVertices;
+        std::vector<unsigned int> tempIndices;
 
-        const auto& points = loader.geometry;
-        std::vector<glm::vec3> normals(points.size(), glm::vec3(0.0f));
-
-        struct Face {
-            unsigned int a, b, c;
-        };
-
-        std::vector<Face> boundary_faces;
-
-        auto insert_face = [&](unsigned int a, unsigned int b, unsigned int c) {
-            glm::vec3 v0 = glm::vec3(points[a][0], points[a][1], points[a][2]);
-            glm::vec3 v1 = glm::vec3(points[b][0], points[b][1], points[b][2]);
-            glm::vec3 v2 = glm::vec3(points[c][0], points[c][1], points[c][2]);
-
-            glm::vec3 normal = glm::normalize(glm::cross(v1 - v0, v2 - v0));
-            normals[a] += normal;
-            normals[b] += normal;
-            normals[c] += normal;
-
-            if (!std::isfinite(normal.x) || !std::isfinite(normal.y) || !std::isfinite(normal.z)) {
-                std::cerr << "Warning: NaN in normal computation for face " << a << ", " << b << ", " << c << std::endl;
-            }
-
-            triangle_indices.push_back(a);
-            triangle_indices.push_back(b);
-            triangle_indices.push_back(c);
-        };
+        const auto& geom = loader.geometry;
 
         for (const auto& elem : loader.mixedTopology) {
             const auto& conn = elem.conn;
 
-            if (elem.type == 8 && conn.size() == 6) {
-                // 三棱柱（type = 8）
-                insert_face(conn[0], conn[1], conn[2]);   // bottom
-                insert_face(conn[3], conn[4], conn[5]);   // top (right-hand)
+            if (elem.type == 9 && conn.size() == 8) {  // HEX8
+                const int hexFaces[6][4] = {
+                    {0, 1, 2, 3}, {4, 5, 6, 7}, {0, 4, 5, 1},
+                    {3, 7, 6, 2}, {0, 3, 7, 4}, {1, 5, 6, 2}
+                };
+                for (const auto& face : hexFaces) {
+                    uint64_t a = conn[face[0]];
+                    uint64_t b = conn[face[1]];
+                    uint64_t c = conn[face[2]];
+                    uint64_t d = conn[face[3]];
 
-                insert_face(conn[0], conn[1], conn[4]);
-                insert_face(conn[0], conn[4], conn[3]);
+                    for (auto vid : {a, b, c, a, c, d}) {
+                        if (indexMap.count(vid) == 0) {
+                            indexMap[vid] = static_cast<int>(tempVertices.size() / 3);
+                            tempVertices.insert(tempVertices.end(), {
+                                static_cast<float>(geom[vid][0]),
+                                static_cast<float>(geom[vid][1]),
+                                static_cast<float>(geom[vid][2])
+                            });
+                        }
+                        tempIndices.push_back(indexMap[vid]);
+                    }
+                }
+            } else if (elem.type == 8 && conn.size() == 6) {  // WEDGE6
+                const int wedgeFaces[5][3] = {
+                    {0, 1, 2}, {3, 4, 5}, {0, 1, 4}, {1, 2, 5}, {2, 0, 3}
+                };
+                for (const auto& face : wedgeFaces) {
+                    uint64_t a = conn[face[0]];
+                    uint64_t b = conn[face[1]];
+                    uint64_t c = conn[face[2]];
 
-                insert_face(conn[1], conn[2], conn[5]);
-                insert_face(conn[1], conn[5], conn[4]);
-
-                insert_face(conn[2], conn[0], conn[3]);
-                insert_face(conn[2], conn[3], conn[5]);
-
-            } else if (elem.type == 9 && conn.size() == 8) {
-                insert_face(conn[0], conn[1], conn[2]);
-                insert_face(conn[0], conn[2], conn[3]);
-                insert_face(conn[4], conn[6], conn[5]);
-                insert_face(conn[4], conn[7], conn[6]);
-                insert_face(conn[0], conn[4], conn[5]);
-                insert_face(conn[0], conn[5], conn[1]);
-                insert_face(conn[1], conn[5], conn[6]);
-                insert_face(conn[1], conn[6], conn[2]);
-                insert_face(conn[2], conn[6], conn[7]);
-                insert_face(conn[2], conn[7], conn[3]);
-                insert_face(conn[3], conn[7], conn[4]);
-                insert_face(conn[3], conn[4], conn[0]);
+                    for (auto vid : {a, b, c}) {
+                        if (indexMap.count(vid) == 0) {
+                            indexMap[vid] = static_cast<int>(tempVertices.size() / 3);
+                            tempVertices.insert(tempVertices.end(), {
+                                static_cast<float>(geom[vid][0]),
+                                static_cast<float>(geom[vid][1]),
+                                static_cast<float>(geom[vid][2])
+                            });
+                        }
+                        tempIndices.push_back(indexMap[vid]);
+                    }
+                }
             }
         }
 
-        // 归一化法线，打包为 vertices（每个顶点：3 位置 + 3 法线）
-        for (size_t i = 0; i < points.size(); ++i) {
-            glm::vec3 pos(points[i][0], points[i][1], points[i][2]);
+        vertices = std::move(tempVertices);
+        triangle_indices = std::move(tempIndices);
 
-            glm::vec3 norm = normals[i];
-
-            // if (glm::length(norm) < 1e-8f || !std::isfinite(norm.x) || !std::isfinite(norm.y) || !std::isfinite(norm.z)) {
-            //     std::cerr << "Warning: invalid normal at vertex " << i << ": " << norm.x << ", " << norm.y << ", " << norm.z << std::endl;
-            //     norm = glm::vec3(0.0f, 1.0f, 0.0f); // fallback
-            // } else {
-            //     norm = glm::normalize(norm);
-            // }
-
-            vertices.push_back(pos.x);
-            vertices.push_back(pos.y);
-            vertices.push_back(pos.z);
-            vertices.push_back(norm.x);
-            vertices.push_back(norm.y);
-            vertices.push_back(norm.z);
-        }
-
-        if (triangle_indices.empty()) {
-            std::cerr << "Warning: No boundary triangles extracted." << std::endl;
-        }
-
+        // OpenGL: setup VAO / VBO / EBO
         glGenVertexArrays(1, &VAO);
         glGenBuffers(1, &VBO);
         glGenBuffers(1, &EBO);
@@ -450,19 +419,81 @@ public:
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, triangle_indices.size() * sizeof(unsigned int), triangle_indices.data(), GL_STATIC_DRAW);
 
-        // 顶点位置
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+        // vertex position attribute only
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
         glEnableVertexAttribArray(0);
-        // 法线
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
-        glEnableVertexAttribArray(1);
 
         glBindVertexArray(0);
     }
 
-    void draw() const {
+    void mesh_line() {
+
+        std::cout << "Loaded geometry points count: " << loader.geometry.size() << std::endl;
+        std::cout << "Loaded mixed topology elements count: " << loader.mixedTopology.size() << std::endl;
+
+        // === 顶点数据 ===
+        for (const auto& pt : loader.geometry) {
+            vertices.push_back(static_cast<float>(pt[0]));
+            vertices.push_back(static_cast<float>(pt[1]));
+            vertices.push_back(static_cast<float>(pt[2]));
+        }
+
+        // === 拓扑线框处理 ===
+        for (const auto& elem : loader.mixedTopology) {
+            const auto& conn = elem.conn;
+            if (elem.type == 8 && conn.size() == 6) {
+                // WEDGE6: 三棱柱
+                AddEdges(line_indices, conn, {
+                    {0,1}, {1,2}, {2,0},       // bottom triangle
+                    {3,4}, {4,5}, {5,3},       // top triangle
+                    {0,3}, {1,4}, {2,5}        // vertical edges
+                });
+            } else if (elem.type == 9 && conn.size() == 8) {
+                // HEX8: 六面体立方体
+                AddEdges(line_indices, conn, {
+                    {0,1}, {1,2}, {2,3}, {3,0}, // bottom
+                    {4,5}, {5,6}, {6,7}, {7,4}, // top
+                    {0,4}, {1,5}, {2,6}, {3,7}  // sides
+                });
+            } else {
+                std::cerr << "Skipping unsupported element type: " << static_cast<int>(elem.type) << " with " << conn.size() << " nodes\n";
+            }
+        }
+
+        // === OpenGL Buffer ===
+        glGenVertexArrays(1, &VAO);
+        glGenBuffers(1, &VBO);
+        glGenBuffers(1, &EBO);
+
+        glBindVertexArray(VAO);
+
+            glBindBuffer(GL_ARRAY_BUFFER, VBO);
+            glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, line_indices.size() * sizeof(unsigned int), line_indices.data(), GL_STATIC_DRAW);
+
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+            glEnableVertexAttribArray(0);
+
+        glBindVertexArray(0);
+    }
+
+    Mesh(XdmfMeshLoader& loader, bool wireframe) : loader(loader) {
+        if (wireframe) 
+        mesh_line();
+        else
+        mesh_face();
+    }
+
+    void draw_triangle() const {
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(triangle_indices.size()), GL_UNSIGNED_INT, 0);
+    }
+
+    void draw_line() const {
+        glBindVertexArray(VAO);
+        glDrawElements(GL_LINES, static_cast<GLsizei>(line_indices.size()), GL_UNSIGNED_INT, 0);
     }
 
     ~Mesh() {
@@ -470,65 +501,35 @@ public:
         glDeleteBuffers(1, &VBO);
         glDeleteBuffers(1, &EBO);
     }
+private:
+    void AddEdges(std::vector<unsigned int>& indices, const std::vector<uint64_t>& conn, const std::initializer_list<std::pair<int,int>>& edges) {
+        for (auto [i, j] : edges) {
+            indices.push_back(static_cast<unsigned int>(conn[i]));
+            indices.push_back(static_cast<unsigned int>(conn[j]));
+        }
+    }
 };
 
 
 const char* vertexShaderSource = R"glsl(
-// vertexShaderSource
 #version 330 core
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec3 aNormal;
-
-uniform mat4 uMVP;
-uniform mat4 uModel;
-
-out vec3 FragPos;
-out vec3 Normal;
-
-void main() {
-    FragPos = vec3(uModel * vec4(aPos, 1.0));
-    Normal = mat3(transpose(inverse(uModel))) * aNormal;
-    gl_Position = uMVP * vec4(aPos, 1.0);
-}
-
+    layout(location = 0) in vec3 aPos;
+    uniform mat4 uMVP;
+    void main() {
+        gl_Position = uMVP * vec4(aPos, 1.0);
+    }
 )glsl";
+
 
 const char* fragmentShaderSource = R"glsl(
-// fragmentShaderSource
 #version 330 core
-in vec3 FragPos;
-in vec3 Normal;
-
-uniform vec3 lightPos;
-uniform vec3 viewPos;
-uniform vec3 uColor;
-
-out vec4 FragColor;
-
-void main() {
-    // 环境光
-    float ambientStrength = 0.1;
-    vec3 ambient = ambientStrength * uColor;
-
-    // 漫反射
-    vec3 norm = normalize(Normal);
-    vec3 lightDir = normalize(lightPos - FragPos);
-    float diff = max(dot(norm, lightDir), 0.0);
-    vec3 diffuse = diff * uColor;
-
-    // 镜面反射
-    float specularStrength = 0.1;
-    vec3 viewDir = normalize(viewPos - FragPos);
-    vec3 reflectDir = reflect(-lightDir, norm);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 16);
-    vec3 specular = specularStrength * spec * vec3(1.0);
-
-    vec3 result = ambient + 0.9 * diffuse + 0.2 * specular;
-    
-    FragColor = vec4(result, 1.0);
-}
-
+    out vec4 FragColor;
+    uniform vec3 uColor;
+    void main() {
+        FragColor = vec4(uColor, 1.0);  // 红褐色
+    }
 )glsl";
+
 
 class Shader {
 public:
@@ -822,7 +823,7 @@ Camera camera;
 
 int main(int argc, char** argv) {
     Application app;
-    if (!app.init(800, 600, "Dynamic Vertex Color Demo")) return -1;
+    if (!app.init(1600, 1200, "Dynamic Vertex Color Demo")) return -1;
 
     imgui_init(app);
 
@@ -855,14 +856,21 @@ int main(int argc, char** argv) {
 
     // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     glEnable(GL_DEPTH_TEST);
-    
-    // glEnable(GL_CULL_FACE);         // 启用背面剔除
-    // glCullFace(GL_BACK);            // 剔除背面
-            
+    glDepthFunc(GL_LEQUAL);  // 默认是 GL_LESS，有时换成 LEQUAL 更稳
+
+    // glEnable(GL_CULL_FACE);          // 启用面剔除
+    // glCullFace(GL_BACK);             // 指定剔除背面（默认就是 GL_BACK）
+    // glFrontFace(GL_CW);              // 指定逆时针为正面（OpenGL 默认是 GL_CCW）
+
         
     Shader shader(vertexShaderSource, fragmentShaderSource);
-    
-    Mesh mesh;
+
+    XdmfMeshLoader loader;
+    loader.Load("model.xdmf");
+    Mesh mesh_line(loader, true);
+    Mesh mesh_face(loader, false);
+
+    glLineWidth(2.0f);  // 默认是1像素，太细也会导致看起来像断线
     
     float time = 0.0f;
 
@@ -887,12 +895,15 @@ int main(int argc, char** argv) {
         // mesh.updateVertices(time);
         shader.use();
         shader.setMat4("uMVP", mvp);
-        shader.setMat4("uModel", glm::mat4(1.0f));
-        shader.setVec3("uColor", glm::vec3(0.7f, 0.7f, 0.9f));
-        // shader.setVec3("lightPos", glm::vec3(3.0f, 3.0f, 3.0f));
-        shader.setVec3("lightPos", glm::vec3(-50.0f, 50.0f, 50.0f));
-        shader.setVec3("viewPos", camera.Position);
-        mesh.draw();
+
+        shader.setVec3("uColor", glm::vec3(0.0f, 0.0f, 0.0f));
+        mesh_face.draw_triangle();
+
+        glEnable(GL_POLYGON_OFFSET_LINE);
+        glPolygonOffset(-1.0f, -1.0f);  // 负值让线“浮”在表面上
+        shader.setVec3("uColor", glm::vec3(1.0f, 1.0f, 1.0f));
+        mesh_line.draw_line();
+        glDisable(GL_POLYGON_OFFSET_LINE);
         
         // 绘制窗口的gui
         imgui_draw();
