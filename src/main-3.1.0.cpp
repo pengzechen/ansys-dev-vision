@@ -260,8 +260,15 @@ void XdmfMeshLoader::LoadMixedTopology(const std::string& hdf5Path) {
 int XdmfMeshLoader::GetNodeCountForXdmfType(uint8_t type) {
     // 参考XDMF规范，常用单元类型及节点数
     switch(type) {
+        case 1: return 2;  // (线)
+        case 2: return 3;  // (三角形)
+        case 4: return 3;  // 
+        case 5: return 4;  // (四边形)
+        case 6: return 4;  // (四面体)
+        case 7: return 5;  // (五面体)
         case 8: return 6;  // Prism (Wedge)
         case 9: return 8;  // Hexahedron (6面体)
+        case 36: return 6; // 带有中点的三角形 2d
 
         default: return -1; // 未知类型
     }
@@ -270,7 +277,7 @@ int XdmfMeshLoader::GetNodeCountForXdmfType(uint8_t type) {
 // 默认摄像机参数
 const float YAW         = -90.0f;
 const float PITCH       =  0.0f;
-const float SPEED       =  10.0f;
+const float SPEED       =  500.0f;
 const float SENSITIVITY =  0.5f;
 const float ZOOM        =  45.0f;
 
@@ -451,7 +458,7 @@ public:
                     {0,4}, {1,5}, {2,6}, {3,7}  // sides
                 });
             } else {
-                std::cerr << "Skipping unsupported element type: " << static_cast<int>(elem.type) << " with " << conn.size() << " nodes\n";
+                // std::cerr << "Skipping unsupported element type: " << static_cast<int>(elem.type) << " with " << conn.size() << " nodes\n";
             }
         }
 
@@ -798,7 +805,7 @@ public:
 
     glm::mat4 build(Camera& camera, float aspectRatio) const {
         glm::mat4 view = camera.GetViewMatrix();
-        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), aspectRatio, 0.1f, 100.0f);
+        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), aspectRatio, 0.1f, 100000.0f);
         return projection * view * model;
     }
 };
@@ -861,7 +868,7 @@ int main(int argc, char** argv) {
     Shader shader(vertexShaderSource, fragmentShaderSource);
 
     XdmfMeshLoader loader;
-    loader.Load("model.xdmf");
+    loader.Load("model_big.xdmf");
     Mesh mesh_line(loader, true);
     Mesh mesh_face(loader, false);
 
