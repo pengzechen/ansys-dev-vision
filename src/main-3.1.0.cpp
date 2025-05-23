@@ -261,11 +261,13 @@ int XdmfMeshLoader::GetNodeCountForXdmfType(uint8_t type) {
     // 参考XDMF规范，常用单元类型及节点数
     switch(type) {
         case 1: return 2;  // (线)
-        case 2: return 3;  // (三角形)
-        case 4: return 3;  // 
+        case 2: return 3;  // 2(type), 2, xxx, xxx
+        case 4: return 3;  // (三角形)
+
         case 5: return 4;  // (四边形)
         case 6: return 4;  // (四面体)
-        case 7: return 5;  // (五面体)
+
+        case 7: return 5;  // (金字塔)
         case 8: return 6;  // Prism (Wedge)
         case 9: return 8;  // Hexahedron (6面体)
         case 36: return 6; // 带有中点的三角形 2d
@@ -381,7 +383,8 @@ public:
                         tempIndices.push_back(indexMap[vid]);
                     }
                 }
-            } else if (elem.type == 8 && conn.size() == 6) {  // WEDGE6
+            } 
+            else if (elem.type == 8 && conn.size() == 6) {  // (三棱柱)
                 const int wedgeFaces[5][3] = {
                     {0, 1, 2}, {3, 4, 5}, {0, 1, 4}, {1, 2, 5}, {2, 0, 3}
                 };
@@ -401,6 +404,88 @@ public:
                         }
                         tempIndices.push_back(indexMap[vid]);
                     }
+                }
+            } 
+            else if (elem.type == 7 && conn.size() == 5) {  // (金字塔单元)
+                // 底面四边形三角化为两个三角形
+                const int faces[6][3] = {
+                    {0, 1, 2}, {0, 2, 3}, // bottom (0-1-2-3)
+                    {0, 1, 4},            // side1
+                    {1, 2, 4},            // side2
+                    {2, 3, 4},            // side3
+                    {3, 0, 4}             // side4
+                };
+
+                for (const auto& face : faces) {
+                    for (int i = 0; i < 3; ++i) {
+                        uint64_t vid = conn[face[i]];
+                        if (indexMap.count(vid) == 0) {
+                            indexMap[vid] = static_cast<int>(tempVertices.size() / 3);
+                            tempVertices.insert(tempVertices.end(), {
+                                static_cast<float>(geom[vid][0]),
+                                static_cast<float>(geom[vid][1]),
+                                static_cast<float>(geom[vid][2])
+                            });
+                        }
+                        tempIndices.push_back(indexMap[vid]);
+                    }
+                }
+            }
+            else if (elem.type == 6 && conn.size() == 4) {  // (四面体)
+                const int tetFaces[4][3] = {
+                    {0, 1, 2}, // bottom (顺时针)
+                    {3, 1, 0}, // side1
+                    {3, 2, 1}, // side2
+                    {3, 0, 2}  // side3
+                };
+                for (const auto& face : tetFaces) {
+                    for (int i = 0; i < 3; ++i) {
+                        uint64_t vid = conn[face[i]];
+                        if (indexMap.count(vid) == 0) {
+                            indexMap[vid] = static_cast<int>(tempVertices.size() / 3);
+                            tempVertices.insert(tempVertices.end(), {
+                                static_cast<float>(geom[vid][0]),
+                                static_cast<float>(geom[vid][1]),
+                                static_cast<float>(geom[vid][2])
+                            });
+                        }
+                        tempIndices.push_back(indexMap[vid]);
+                    }
+                }
+            }
+            else if (elem.type == 5 && conn.size() == 4) {  // 四边形面片
+                const int quadFaces[2][3] = {
+                    {0, 1, 2}, // 第一个三角形（顺时针）
+                    {0, 2, 3}  // 第二个三角形（顺时针）
+                };
+                for (const auto& face : quadFaces) {
+                    for (int i = 0; i < 3; ++i) {
+                        uint64_t vid = conn[face[i]];
+                        if (indexMap.count(vid) == 0) {
+                            indexMap[vid] = static_cast<int>(tempVertices.size() / 3);
+                            tempVertices.insert(tempVertices.end(), {
+                                static_cast<float>(geom[vid][0]),
+                                static_cast<float>(geom[vid][1]),
+                                static_cast<float>(geom[vid][2])
+                            });
+                        }
+                        tempIndices.push_back(indexMap[vid]);
+                    }
+                }
+            }
+            else if (elem.type == 4 && conn.size() == 3) {  // 三角形面片
+                const int triFace[3] = {0, 1, 2};  // 三角形顶点，顺时针
+                for (int i = 0; i < 3; ++i) {
+                    uint64_t vid = conn[triFace[i]];
+                    if (indexMap.count(vid) == 0) {
+                        indexMap[vid] = static_cast<int>(tempVertices.size() / 3);
+                        tempVertices.insert(tempVertices.end(), {
+                            static_cast<float>(geom[vid][0]),
+                            static_cast<float>(geom[vid][1]),
+                            static_cast<float>(geom[vid][2])
+                        });
+                    }
+                    tempIndices.push_back(indexMap[vid]);
                 }
             }
         }
@@ -443,19 +528,42 @@ public:
         // === 拓扑线框处理 ===
         for (const auto& elem : loader.mixedTopology) {
             const auto& conn = elem.conn;
-            if (elem.type == 8 && conn.size() == 6) {
+            if (elem.type == 9 && conn.size() == 8) {
+                // HEX8: 六面体立方体
+                AddEdges(line_indices, conn, {
+                    {0,1}, {1,2}, {2,3}, {3,0}, // bottom
+                    {4,5}, {5,6}, {6,7}, {7,4}, // top
+                    {0,4}, {1,5}, {2,6}, {3,7}  // sides
+                });
+            }
+            else if (elem.type == 8 && conn.size() == 6) {  // (三棱柱)
                 // WEDGE6: 三棱柱
                 AddEdges(line_indices, conn, {
                     {0,1}, {1,2}, {2,0},       // bottom triangle
                     {3,4}, {4,5}, {5,3},       // top triangle
                     {0,3}, {1,4}, {2,5}        // vertical edges
                 });
-            } else if (elem.type == 9 && conn.size() == 8) {
-                // HEX8: 六面体立方体
+            } 
+            else if (elem.type == 7 && conn.size() == 5) {  // (金字塔)
                 AddEdges(line_indices, conn, {
-                    {0,1}, {1,2}, {2,3}, {3,0}, // bottom
-                    {4,5}, {5,6}, {6,7}, {7,4}, // top
-                    {0,4}, {1,5}, {2,6}, {3,7}  // sides
+                    {0,1}, {1,2}, {2,3}, {3,0}, // 底面边
+                    {0,4}, {1,4}, {2,4}, {3,4}  // 侧面边
+                });
+            } 
+            else if (elem.type == 6 && conn.size() == 4) {  // (四面体)
+                AddEdges(line_indices, conn, {
+                    {0,1}, {1,2}, {2,0},  // 底面三角形
+                    {0,3}, {1,3}, {2,3}   // 连接顶点 3 的三条边
+                });
+            } 
+            else if (elem.type == 5 && conn.size() == 4) {  // (四边形)
+                AddEdges(line_indices, conn, {
+                    {0,1}, {1,2}, {2,3}, {3,0}
+                });
+            } 
+            else if (elem.type == 4 && conn.size() == 3) {  // (三角形)
+                AddEdges(line_indices, conn, {
+                    {0, 1}, {1, 2}, {2, 0}
                 });
             } else {
                 // std::cerr << "Skipping unsupported element type: " << static_cast<int>(elem.type) << " with " << conn.size() << " nodes\n";
