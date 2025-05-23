@@ -10,6 +10,9 @@
 #include <sstream>
 #include <map>
 #include <algorithm>
+#include <array>
+#include <cassert>
+#include <set>
 
 // 加载数据使用
 #include "tinyxml2.h"
@@ -31,15 +34,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/ext/scalar_common.hpp>
 
-#include <tinyxml2.h>
-#include <hdf5.h>
-#include <vector>
-#include <array>
-#include <string>
-#include <unordered_map>
-#include <iostream>
-#include <cassert>
-#include <set>
+
 
 class XdmfMeshLoader {
 public:
